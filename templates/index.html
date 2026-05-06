@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ICS → Google Calendar</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f8f9fa;
+      --card: #ffffff;
+      --primary: #4285f4;
+      --primary-dark: #2b6de0;
+      --danger: #ea4335;
+      --success: #34a853;
+      --warning: #fbbc05;
+      --text: #202124;
+      --muted: #5f6368;
+      --border: #dadce0;
+      --radius: 12px;
+      --shadow: 0 2px 10px rgba(0,0,0,.08);
+    }
+
+    body {
+      font-family: "Google Sans", "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 16px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    header h1 {
+      font-size: 2rem;
+      font-weight: 600;
+      color: var(--primary);
+    }
+    header p { color: var(--muted); margin-top: 6px; }
+
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 32px;
+      width: 100%;
+      max-width: 560px;
+      margin-bottom: 20px;
+    }
+
+    /* ── Flash messages ── */
+    .flashes { width: 100%; max-width: 560px; margin-bottom: 16px; }
+    .flash {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-size: .9rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .flash.success { background: #e6f4ea; color: #137333; border-left: 4px solid var(--success); }
+    .flash.error   { background: #fce8e6; color: #c5221f; border-left: 4px solid var(--danger); }
+    .flash.warning { background: #fef7e0; color: #8a6c00; border-left: 4px solid var(--warning); }
+    .flash.info    { background: #e8f0fe; color: #1a73e8; border-left: 4px solid var(--primary); }
+
+    /* ── Auth section ── */
+    .auth-badge {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      background: #e6f4ea;
+      color: #137333;
+      font-size: .9rem;
+      margin-bottom: 24px;
+    }
+    .auth-badge a {
+      color: var(--danger);
+      font-size: .8rem;
+      text-decoration: none;
+    }
+    .auth-badge a:hover { text-decoration: underline; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 11px 22px;
+      border-radius: 8px;
+      border: none;
+      font-size: .95rem;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background .15s, box-shadow .15s;
+    }
+    .btn-primary   { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-dark); box-shadow: 0 2px 8px rgba(66,133,244,.3); }
+    .btn-google    { background: #fff; color: var(--text); border: 1px solid var(--border); }
+    .btn-google:hover { background: #f1f3f4; }
+    .btn-full { width: 100%; justify-content: center; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ── Form ── */
+    label { display: block; font-size: .85rem; font-weight: 500; margin-bottom: 6px; color: var(--muted); }
+
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 32px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      margin-bottom: 20px;
+      position: relative;
+    }
+    .drop-zone.drag-over { border-color: var(--primary); background: #e8f0fe22; }
+    .drop-zone input[type="file"] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    }
+    .drop-zone .icon { font-size: 2rem; margin-bottom: 8px; }
+    .drop-zone p { color: var(--muted); font-size: .9rem; }
+    .drop-zone .filename { font-weight: 600; color: var(--primary); margin-top: 4px; font-size: .9rem; }
+
+    .divider {
+      display: flex; align-items: center; gap: 12px;
+      color: var(--muted); font-size: .85rem; margin: 16px 0;
+    }
+    .divider::before, .divider::after {
+      content: ""; flex: 1; height: 1px; background: var(--border);
+    }
+
+    input[type="url"], select {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: .95rem;
+      outline: none;
+      transition: border-color .15s;
+      background: #fff;
+      color: var(--text);
+      margin-bottom: 16px;
+    }
+    input[type="url"]:focus, select:focus { border-color: var(--primary); }
+
+    .form-group { margin-bottom: 16px; }
+
+    /* ── Not authenticated ── */
+    .not-auth {
+      text-align: center;
+    }
+    .not-auth p { color: var(--muted); margin-bottom: 24px; font-size: .95rem; line-height: 1.6; }
+    .google-logo { width: 18px; height: 18px; vertical-align: middle; }
+
+    /* ── Footer ── */
+    footer {
+      margin-top: 32px;
+      color: var(--muted);
+      font-size: .8rem;
+      text-align: center;
+    }
+    footer a { color: var(--primary); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📅 ICS → Google Calendar</h1>
+  <p>Importez un fichier .ics ou un flux iCalendar dans votre agenda Google</p>
+</header>
+
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="flashes">
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+<div class="card">
+
+  {% if authenticated %}
+    <!-- Auth badge -->
+    <div class="auth-badge">
+      <span>✅ Connecté en tant que <strong>{{ user_email }}</strong></span>
+      <a href="/logout">Déconnexion</a>
+    </div>
+
+    <!-- Import form -->
+    <form action="/import" method="POST" enctype="multipart/form-data" id="importForm">
+
+      <!-- File drop zone -->
+      <label>Fichier ICS</label>
+      <div class="drop-zone" id="dropZone">
+        <input type="file" name="file" id="fileInput" accept=".ics,text/calendar"/>
+        <div class="icon">📂</div>
+        <p>Glissez un fichier <strong>.ics</strong> ici<br>ou cliquez pour parcourir</p>
+        <div class="filename" id="fileName"></div>
+      </div>
+
+      <div class="divider">ou</div>
+
+      <!-- URL input -->
+      <div class="form-group">
+        <label for="url">URL d'un flux iCalendar</label>
+        <input type="url" name="url" id="urlInput"
+               placeholder="https://example.com/agenda.ics"/>
+      </div>
+
+      <!-- Calendar selector -->
+      <div class="form-group">
+        <label for="calendar_id">Agenda de destination</label>
+        <select name="calendar_id" id="calendar_id">
+          {% for cal in calendars %}
+            <option value="{{ cal.id }}" {% if cal.get('primary') %}selected{% endif %}>
+              {{ cal.get('summaryOverride') or cal.get('summary', cal.id) }}
+              {% if cal.get('primary') %}(principal){% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-full" id="submitBtn">
+        ⬆️ Importer dans Google Calendar
+      </button>
+    </form>
+
+  {% else %}
+    <!-- Not connected -->
+    <div class="not-auth">
+      <p>
+        Cette application utilise l'<strong>API Google Calendar</strong> pour importer
+        vos événements directement dans votre agenda, sans passer par l'interface
+        Google Agenda. Connectez-vous avec votre compte Google pour commencer.
+      </p>
+      <a href="/login" class="btn btn-google">
+        <svg class="google-logo" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+          <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.8 2.5 30.3 0 24 0 14.8 0 6.9 5.4 2.9 13.3l7.8 6C12.5 13 17.8 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 7.1-10 7.1-17z"/>
+          <path fill="#FBBC05" d="M10.7 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.8-6A23.9 23.9 0 0 0 0 24c0 3.9.9 7.5 2.5 10.8l8.2-6.1z"/>
+          <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.5-4.8 2.3-8.4 2.3-6.2 0-11.5-4.2-13.3-9.9l-8.2 6.1C6.9 42.6 14.8 48 24 48z"/>
+        </svg>
+        Se connecter avec Google
+      </a>
+    </div>
+  {% endif %}
+
+</div>
+
+<footer>
+  Open source &middot;
+  <a href="https://github.com/votre-repo/ics-to-gcal" target="_blank">GitHub</a>
+  &middot; Données non stockées, tout passe en local
+</footer>
+
+<script>
+  // ── Drag & Drop ──────────────────────────────────────────────────────────
+  const dropZone = document.getElementById("dropZone");
+  const fileInput = document.getElementById("fileInput");
+  const fileName  = document.getElementById("fileName");
+  const urlInput  = document.getElementById("urlInput");
+
+  if (dropZone) {
+    dropZone.addEventListener("dragover",  e => { e.preventDefault(); dropZone.classList.add("drag-over"); });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+    dropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      dropZone.classList.remove("drag-over");
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        // Assign to input
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        fileInput.files = dt.files;
+        fileName.textContent = "📄 " + file.name;
+        urlInput.value = "";
+      }
+    });
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files[0]) {
+        fileName.textContent = "📄 " + fileInput.files[0].name;
+        urlInput.value = "";
+      }
+    });
+    urlInput.addEventListener("input", () => {
+      if (urlInput.value) {
+        fileInput.value = "";
+        fileName.textContent = "";
+      }
+    });
+  }
+
+  // ── Submit feedback ──────────────────────────────────────────────────────
+  const form      = document.getElementById("importForm");
+  const submitBtn = document.getElementById("submitBtn");
+  if (form) {
+    form.addEventListener("submit", () => {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "⏳ Import en cours…";
+    });
+  }
+</script>
+
+</body>
+</html>
