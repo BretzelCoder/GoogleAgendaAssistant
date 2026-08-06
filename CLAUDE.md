@@ -88,8 +88,23 @@ L'IIFE `waitForGIS` en fin de fichier attend que `google.accounts.oauth2` soit d
 - le `timeZone` envoyé vient de `str(start_dt.tzinfo)`, qui n'est pas garanti d'être un nom
   IANA valide selon la source du fichier
 
-`OAUTHLIB_INSECURE_TRANSPORT=1` est forcé au chargement du module et `app.run(debug=True)`
-écoute sur `0.0.0.0:5000` : ne pas exposer cette variante hors de la machine locale.
+`OAUTHLIB_INSECURE_TRANSPORT=1` est forcé au chargement du module : ne pas exposer cette
+variante hors de la machine locale. Le serveur n'écoute donc que sur `127.0.0.1:5000`, et
+le débogueur Werkzeug — qui offre une console d'exécution de code — reste désactivé sauf
+`FLASK_DEBUG=1`.
+
+Les jetons OAuth ne transitent **pas** par le cookie de session : les sessions Flask sont
+signées mais non chiffrées, leur contenu est lisible par le navigateur. Le cookie ne porte
+qu'un identifiant opaque (`sid`), et `_CREDENTIALS_STORE` garde les credentials en mémoire
+du processus. Deux conséquences à ne pas perdre de vue en cas d'évolution : un redémarrage
+déconnecte, et l'app suppose **un seul processus** (pas de workers Gunicorn). Idem pour
+`SECRET_KEY`, désormais tirée au hasard si l'environnement ne la fournit pas.
+
+`fetch_ics_url()` protège la récupération d'ICS distants contre les SSRF : schéma limité à
+HTTP(S), résolution DNS puis rejet des adresses privées, loopback, link-local et réservées,
+revalidation à **chaque** redirection (suivies à la main, `allow_redirects=False`), et
+plafond `MAX_ICS_BYTES`. Subsiste une fenêtre de DNS rebinding — la résolution de contrôle
+n'est pas celle qu'utilise `requests` — jugée acceptable pour un outil local.
 
 ## Développement
 

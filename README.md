@@ -227,7 +227,7 @@ Cette variante nécessite un identifiant OAuth **avec secret**, différent de ce
 ### Lancement
 
 ```bash
-# Recommandé : définir une clé de session (sinon la valeur par défaut est utilisée)
+# Facultatif : fixer la clé de session pour rester connecté d'un redémarrage à l'autre
 # Windows PowerShell
 $env:SECRET_KEY = "une-valeur-aleatoire"
 # macOS / Linux
@@ -242,11 +242,13 @@ L'application écoute sur [http://localhost:5000](http://localhost:5000).
 
 | Variable | Défaut | Rôle |
 |---|---|---|
-| `SECRET_KEY` | `change-me-in-production` | Clé de signature des sessions Flask |
+| `SECRET_KEY` | *aléatoire à chaque démarrage* | Clé de signature des sessions Flask |
 | `GOOGLE_CLIENT_SECRETS` | `credentials.json` | Chemin du fichier d'identifiants OAuth |
+| `FLASK_DEBUG` | *désactivé* | `1` active le débogueur Werkzeug (**console d'exécution de code** — développement uniquement) |
 
-> ⚠️ `app.py` démarre avec `debug=True` et force `OAUTHLIB_INSECURE_TRANSPORT=1` (OAuth
-> autorisé en HTTP). C'est acceptable en local, **pas** pour une exposition sur le réseau.
+> ⚠️ `app.py` force `OAUTHLIB_INSECURE_TRANSPORT=1` (OAuth autorisé en HTTP). C'est
+> acceptable parce que le serveur n'écoute que sur `127.0.0.1`, **pas** pour une exposition
+> sur le réseau.
 
 ---
 
@@ -262,9 +264,11 @@ L'application écoute sur [http://localhost:5000](http://localhost:5000).
 
 ### Variante Flask
 
-- Les identifiants OAuth (token **et** refresh token) sont stockés dans la **session Flask**, c'est-à-dire dans un cookie signé par `SECRET_KEY` → définissez une vraie `SECRET_KEY`
+- **Aucun jeton dans le cookie** : les sessions Flask sont signées mais non chiffrées, donc lisibles par le navigateur. Le cookie ne contient qu'un identifiant opaque ; token et refresh token restent en mémoire du serveur et disparaissent à l'arrêt
+- **Écoute locale seulement** (`127.0.0.1`), débogueur désactivé par défaut
+- **URLs distantes filtrées** : le téléchargement d'un ICS par URL refuse les adresses privées, locales et réservées, y compris après redirection (protection SSRF)
 - `credentials.json` contient un **client secret** : gardez-le hors du dépôt
-- Prévue pour un usage **local uniquement** (`debug=True`, OAuth en HTTP autorisé)
+- Prévue pour un usage **local uniquement** (OAuth en HTTP autorisé)
 
 ---
 

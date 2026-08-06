@@ -1,7 +1,11 @@
 import os
 import json
+import ipaddress
+import secrets
+import socket
 import requests
 from datetime import datetime, date
+from urllib.parse import urljoin, urlparse
 
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from google_auth_oauthlib.flow import Flow
@@ -11,26 +15,53 @@ from icalendar import Calendar
 
 # ── Config ────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "change-me-in-production")
+
+# Taille maximale acceptée pour un fichier ICS, téléversé comme téléchargé.
+MAX_ICS_BYTES = 10 * 1024 * 1024
+
+# Sans SECRET_KEY explicite, une clé aléatoire est tirée à chaque démarrage : les
+# sessions ne survivent pas à un redémarrage, ce qui vaut mieux qu'une valeur par
+# défaut publique, laquelle rendrait les cookies de session forgeables.
+app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    MAX_CONTENT_LENGTH=MAX_ICS_BYTES,
+)
 
 CLIENT_SECRETS_FILE = os.environ.get("GOOGLE_CLIENT_SECRETS", "credentials.json")
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
-# Allow HTTP for local dev (remove in production)
+# Autorise HTTP pour le callback OAuth local. Acceptable uniquement parce que le
+# serveur n'écoute que sur 127.0.0.1 (voir le point d'entrée en fin de fichier).
 os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+# Les sessions Flask sont signées mais NON chiffrées : leur contenu est lisible en
+# clair par le navigateur. Aucun jeton n'y est donc placé — le cookie ne porte qu'un
+# identifiant opaque, les credentials restent en mémoire du processus. Corollaire :
+# une déconnexion à chaque redémarrage, et un seul processus (pas de workers).
+_CREDENTIALS_STORE = {}
+
+
 def get_credentials():
-    """Reconstruit les credentials Google depuis la session."""
-    if "credentials" not in session:
+    """Reconstruit les credentials Google depuis le stockage serveur."""
+    sid = session.get("sid")
+    data = _CREDENTIALS_STORE.get(sid) if sid else None
+    if not data:
         return None
-    return Credentials(**session["credentials"])
+    return Credentials(**data)
 
 
 def store_credentials(creds):
-    """Sauvegarde les credentials dans la session."""
-    session["credentials"] = {
+    """Conserve les credentials côté serveur ; le cookie ne reçoit qu'une référence."""
+    sid = session.get("sid")
+    if not sid:
+        sid = secrets.token_urlsafe(32)
+        session["sid"] = sid
+    _CREDENTIALS_STORE[sid] = {
         "token": creds.token,
         "refresh_token": creds.refresh_token,
         "token_uri": creds.token_uri,
@@ -38,6 +69,60 @@ def store_credentials(creds):
         "client_secret": creds.client_secret,
         "scopes": list(creds.scopes or SCOPES),
     }
+
+
+def clear_credentials():
+    """Oublie les credentials associés à la session courante."""
+    sid = session.get("sid")
+    if sid:
+        _CREDENTIALS_STORE.pop(sid, None)
+
+
+def _is_public_url(url: str) -> bool:
+    """Vérifie qu'une URL vise un hôte public — protection contre les SSRF."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return False
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        infos = socket.getaddrinfo(parsed.hostname, port, proto=socket.IPPROTO_TCP)
+    except (socket.gaierror, ValueError):
+        return False
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            return False
+    return bool(infos)
+
+
+def fetch_ics_url(url: str, max_redirects: int = 5) -> bytes:
+    """Télécharge un ICS distant en validant l'URL, puis chaque redirection."""
+    for _ in range(max_redirects + 1):
+        if not _is_public_url(url):
+            raise ValueError("URL refusée : seules les adresses HTTP(S) publiques sont acceptées.")
+
+        resp = requests.get(url, timeout=15, allow_redirects=False, stream=True)
+        try:
+            if resp.is_redirect or resp.is_permanent_redirect:
+                location = resp.headers.get("location")
+                if not location:
+                    raise ValueError("Redirection sans destination.")
+                url = urljoin(url, location)
+                continue
+
+            resp.raise_for_status()
+            content, total = [], 0
+            for chunk in resp.iter_content(65536):
+                total += len(chunk)
+                if total > MAX_ICS_BYTES:
+                    raise ValueError(f"Fichier trop volumineux ({MAX_ICS_BYTES // (1024 * 1024)} Mo maximum).")
+                content.append(chunk)
+            return b"".join(content)
+        finally:
+            resp.close()
+
+    raise ValueError("Trop de redirections.")
 
 
 def ics_component_to_google_event(component):
@@ -102,6 +187,13 @@ def list_calendars(service):
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+@app.errorhandler(413)
+def too_large(_):
+    """MAX_CONTENT_LENGTH renvoie un 413 brut : on garde le style des autres erreurs."""
+    flash(f"❌ Fichier trop volumineux ({MAX_ICS_BYTES // (1024 * 1024)} Mo maximum).", "error")
+    return redirect(url_for("index"))
+
+
 @app.route("/")
 def index():
     creds = get_credentials()
@@ -116,7 +208,7 @@ def index():
             if primary:
                 user_email = primary.get("id")
         except Exception:
-            session.pop("credentials", None)
+            clear_credentials()
     return render_template("index.html", authenticated=bool(creds),
                            calendars=calendars, user_email=user_email)
 
@@ -149,6 +241,7 @@ def oauth2callback():
 
 @app.route("/logout")
 def logout():
+    clear_credentials()
     session.clear()
     flash("Déconnecté.", "info")
     return redirect(url_for("index"))
@@ -173,9 +266,7 @@ def import_ics():
         source_name = uploaded_file.filename
     elif ics_url:
         try:
-            resp = requests.get(ics_url, timeout=15)
-            resp.raise_for_status()
-            ics_content = resp.content
+            ics_content = fetch_ics_url(ics_url)
             source_name = ics_url
         except Exception as e:
             flash(f"❌ Impossible de télécharger l'URL : {e}", "error")
@@ -230,4 +321,7 @@ def import_ics():
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    # Écoute volontairement limitée à la boucle locale : le débogueur Werkzeug
+    # expose une console d'exécution de code, et l'app manipule des jetons Google.
+    # Débogage sur demande explicite : FLASK_DEBUG=1 python app.py
+    app.run(debug=os.environ.get("FLASK_DEBUG") == "1", host="127.0.0.1", port=5000)
