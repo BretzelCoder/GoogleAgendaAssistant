@@ -25,6 +25,11 @@ dans les deux sans que ce soit demandé.
 Aucune étape de build, aucun gestionnaire de paquets. Les scripts sont chargés en balises
 `<script>` dans l'ordre et communiquent par des globales.
 
+Le fichier vide [.nojekyll](.nojekyll) à la racine **ne doit pas être supprimé** : sans lui,
+GitHub Pages fait passer tout le dépôt par Jekyll, qui interprète alors les `{% … %}` de
+`templates/index.html` — un template Jinja2 — comme du Liquid invalide et échoue à publier
+le site. Le site étant du HTML/JS statique, Jekyll ne lui apporte rien.
+
 ```
 index.html
   └─ js/ical.min.js   → global ICAL      (ical.js 1.5.0, tierce, ne pas éditer)
