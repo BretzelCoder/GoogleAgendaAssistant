@@ -21,6 +21,28 @@ Application web 100 % statique pour importer des fichiers `.ics` (ou flux iCalen
 
 La configuration se fait **une seule fois** et prend environ 10 minutes.
 
+### Prérequis
+
+| | Version statique | Variante Flask |
+|---|---|---|
+| Compte Google | ✅ requis | ✅ requis |
+| Navigateur récent | ✅ requis | ✅ requis |
+| Python | 3.x — uniquement pour servir les fichiers ; n'importe quel serveur HTTP fait l'affaire | **3.8 ou plus** (imposé par Flask 3.0) |
+| Dépendances à installer | ❌ aucune — les bibliothèques sont déjà dans `js/` | `pip install -r requirements.txt` |
+
+### Étape 0 — Récupérer le projet
+
+```bash
+git clone https://github.com/BretzelCoder/GoogleAgendaAssistant.git
+cd GoogleAgendaAssistant
+```
+
+> Sans Git : **Code → Download ZIP** sur la page GitHub du dépôt, puis décompressez-le.
+> Toutes les commandes qui suivent s'exécutent depuis la racine du dossier obtenu.
+
+Si votre objectif est d'héberger l'application plutôt que de l'utiliser en local,
+allez directement à [Déploiement sur GitHub Pages](#-déploiement-sur-github-pages).
+
 ### Étape 1 — Créer un projet Google Cloud
 
 1. Rendez-vous sur [console.cloud.google.com](https://console.cloud.google.com)
