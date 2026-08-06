@@ -1,0 +1,7 @@
+# Normalisation des fins de ligne par défaut
+* text=auto
+
+# Dépendance tierce vendorisée : aucune conversion de fin de ligne.
+# Indispensable pour que l'empreinte SHA-256 documentée dans THIRD-PARTY-NOTICES.md
+# reste vérifiable à l'identique sur toutes les plateformes.
+js/ical.min.js -text

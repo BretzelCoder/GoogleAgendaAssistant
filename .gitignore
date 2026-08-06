@@ -4,3 +4,14 @@ Thumbs.db
 .vscode/
 .idea/
 node_modules/
+
+# Secrets Google OAuth (variante Flask) — ne jamais commiter
+credentials.json
+client_secret*.json
+.env
+
+# Python (variante Flask)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
