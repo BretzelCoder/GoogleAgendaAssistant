@@ -25,10 +25,12 @@ dans les deux sans que ce soit demandé.
 Aucune étape de build, aucun gestionnaire de paquets. Les scripts sont chargés en balises
 `<script>` dans l'ordre et communiquent par des globales.
 
-Le fichier vide [.nojekyll](.nojekyll) à la racine **ne doit pas être supprimé** : sans lui,
-GitHub Pages fait passer tout le dépôt par Jekyll, qui interprète alors les `{% … %}` de
-`templates/index.html` — un template Jinja2 — comme du Liquid invalide et échoue à publier
-le site. Le site étant du HTML/JS statique, Jekyll ne lui apporte rien.
+Le fichier vide [.nojekyll](.nojekyll) à la racine désactive le passage du dépôt par Jekyll
+lors de la publication GitHub Pages. Le site est du HTML/JS statique : Jekyll ne lui apporte
+rien, et s'en passer évite qu'il s'invite un jour dans la boucle — notamment sur les fichiers
+préfixés d'un `_`, qu'il ignore silencieusement, ou sur `templates/index.html` si ce template
+Jinja2 venait à recevoir un front matter YAML, seul cas où Jekyll tenterait d'en lire les
+`{% … %}` comme du Liquid.
 
 ```
 index.html
