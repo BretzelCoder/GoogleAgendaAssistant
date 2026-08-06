@@ -5,6 +5,9 @@ Thumbs.db
 .idea/
 node_modules/
 
+# Configuration locale de Claude Code (autorisations d'outils, propres a la machine)
+.claude/
+
 # Secrets Google OAuth (variante Flask) — ne jamais commiter
 credentials.json
 client_secret*.json
