@@ -25,13 +25,6 @@ dans les deux sans que ce soit demandé.
 Aucune étape de build, aucun gestionnaire de paquets. Les scripts sont chargés en balises
 `<script>` dans l'ordre et communiquent par des globales.
 
-Le fichier vide [.nojekyll](.nojekyll) à la racine désactive le passage du dépôt par Jekyll
-lors de la publication GitHub Pages. Le site est du HTML/JS statique : Jekyll ne lui apporte
-rien, et s'en passer évite qu'il s'invite un jour dans la boucle — notamment sur les fichiers
-préfixés d'un `_`, qu'il ignore silencieusement, ou sur `templates/index.html` si ce template
-Jinja2 venait à recevoir un front matter YAML, seul cas où Jekyll tenterait d'en lire les
-`{% … %}` comme du Liquid.
-
 ```
 index.html
   └─ js/ical.min.js   → global ICAL      (ical.js 1.5.0, tierce, ne pas éditer)
