@@ -43,7 +43,26 @@ index.html
   pour rester visible dans la prévisualisation
 - des accesseurs d'affichage (`startDisplay`, `summary`, `isRecurring`, …) formatés en `fr-FR`
 
-La récurrence est transmise telle quelle : `event.recurrence = ['RRULE:…', 'EXDATE:…']`.
+La `RRULE` est transmise telle quelle ; les `EXDATE` sont réécrites en forme iCalendar
+(`20260810T120000Z`, ou `EXDATE;VALUE=DATE:` pour les dates seules) — l'ISO-8601 étendu
+est refusé par Google.
+
+Les fuseaux horaires demandent trois précautions, toutes trois nécessaires :
+
+1. `parseICS()` enregistre les `VTIMEZONE` du fichier dans `ICAL.TimezoneService` **avant**
+   toute lecture de date (les valeurs sont résolues au premier accès, et le service est
+   remis à zéro à chaque parse pour ne pas mélanger deux fichiers). Sans cet enregistrement,
+   un TZID inconnu d'ical.js est traité comme heure *flottante*, donc lu dans le fuseau du
+   navigateur : l'événement est importé décalé, sans aucune erreur visible.
+2. `normalizeTimeZone()` traduit les noms Windows (`GMT Standard Time`, émis par Exchange
+   et Outlook) en identifiants IANA via la table `WINDOWS_TO_IANA`, et valide le reste avec
+   `Intl.DateTimeFormat`. Un nom non résoluble n'est **pas** transmis : Google répond
+   « Invalid time zone definition for start time » et rejette l'événement entier.
+3. `toDate()` rattrape le cas d'un TZID valide sans `VTIMEZONE` correspondant, en appliquant
+   le fuseau à la main (`Intl`, double passe pour les changements d'heure).
+
+`dateTime` est toujours un instant absolu suffixé `Z` ; `timeZone` ne sert donc qu'à la
+récurrence et à l'affichage, et peut être omis sans casser l'import.
 
 ### `js/gcal.js` — `GCal`
 
