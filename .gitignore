@@ -18,3 +18,9 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# Notes de travail personnelles (URLs et reperes propres a l'utilisateur)
+perso.md
+
+# Pages SIGA vidangees par /siga/diagnostic?save=1 — contiennent des donnees personnelles
+.siga-dump/
