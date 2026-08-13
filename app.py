@@ -78,6 +78,26 @@ def clear_credentials():
         _CREDENTIALS_STORE.pop(sid, None)
 
 
+# Vérificateurs PKCE des flux OAuth en cours. Même principe que les credentials :
+# rien dans le cookie, tout en mémoire du processus.
+_CODE_VERIFIER_STORE = {}
+
+
+def store_code_verifier(verifier):
+    """Retient le vérificateur PKCE du flux en cours jusqu'au retour de Google."""
+    sid = session.get("sid")
+    if not sid:
+        sid = secrets.token_urlsafe(32)
+        session["sid"] = sid
+    _CODE_VERIFIER_STORE[sid] = verifier
+
+
+def pop_code_verifier():
+    """Récupère et consomme le vérificateur PKCE — il ne sert qu'une fois."""
+    sid = session.get("sid")
+    return _CODE_VERIFIER_STORE.pop(sid, None) if sid else None
+
+
 def _is_public_url(url: str) -> bool:
     """Vérifie qu'une URL vise un hôte public — protection contre les SSRF."""
     parsed = urlparse(url)
@@ -223,6 +243,10 @@ def login():
         prompt="consent",
     )
     session["oauth_state"] = state
+    # PKCE : `authorization_url()` vient de tirer un code_verifier dont seule
+    # l'empreinte part chez Google. Le callback reconstruit un Flow neuf, qui
+    # l'ignorerait — Google refuserait alors l'échange (« Missing code verifier »).
+    store_code_verifier(flow.code_verifier)
     return redirect(auth_url)
 
 
@@ -230,7 +254,11 @@ def login():
 def oauth2callback():
     state = session.get("oauth_state")
     flow = Flow.from_client_secrets_file(
-        CLIENT_SECRETS_FILE, scopes=SCOPES, state=state
+        CLIENT_SECRETS_FILE,
+        scopes=SCOPES,
+        state=state,
+        code_verifier=pop_code_verifier(),
+        autogenerate_code_verifier=False,
     )
     flow.redirect_uri = url_for("oauth2callback", _external=True)
     flow.fetch_token(authorization_response=request.url)
