@@ -20,6 +20,12 @@ Sauf demande explicite, les modifications fonctionnelles vont dans la **version 
 La variante Flask n'est pas maintenue en parallèle : ne pas dupliquer une fonctionnalité
 dans les deux sans que ce soit demandé.
 
+**Exception : la synchronisation du planning SIGA** ([siga.py](siga.py)) vit dans la variante
+Flask, et ne peut pas en sortir. Elle exige une session HTTP authentifiée sur un domaine
+tiers ; un navigateur ne peut ni lire la réponse de `siga.usm.cl` depuis une autre origine
+(aucun en-tête CORS sur ce portail JSP), ni porter les cookies de session. C'est le seul
+domaine où la variante Flask dépasse la version statique.
+
 ## Version statique
 
 Aucune étape de build, aucun gestionnaire de paquets. Les scripts sont chargés en balises
@@ -125,6 +131,154 @@ revalidation à **chaque** redirection (suivies à la main, `allow_redirects=Fal
 plafond `MAX_ICS_BYTES`. Subsiste une fenêtre de DNS rebinding — la résolution de contrôle
 n'est pas celle qu'utilise `requests` — jugée acceptable pour un outil local.
 
+## Connecteur SIGA — `siga.py`
+
+Se connecte au portail `siga.usm.cl` (Universidad Técnica Federico Santa María), lit la page
+*Horario del alumno* et convertit la grille en événements Google récurrents. Routes associées
+dans [app.py](app.py) : `/siga/planning` (lecture), `/siga/import` (synchronisation),
+`/siga/oublier`, `/siga/diagnostic`.
+
+### Quatre comportements du portail à ne pas perdre de vue
+
+Tous constatés sur le site, pas déduits d'une documentation :
+
+1. **Queue-it.** Le portail est derrière une salle d'attente (`usm.queue-it.net`). La première
+   visite enchaîne des redirections inter-domaines qui déposent un cookie `QueueITAccepted-…`.
+   Sans cookie jar partagé, on boucle jusqu'au plafond de redirections. D'où la
+   `requests.Session` unique, et `ALLOWED_HOST_SUFFIXES` qui admet `.queue-it.net`.
+2. **ISO-8859-1.** Les pages sont servies en latin-1. Décodées en UTF-8, « miércoles » devient
+   du mojibake et la détection des jours échoue silencieusement — le planning sort vide sans
+   erreur. `_read_body()` force donc l'encodage.
+3. **Formulaires auto-soumis en JavaScript.** `valida_login.jsp` ne redirige pas : il renvoie
+   une page contenant `<form>` + `document.form_login.submit()`. `requests` n'exécutant aucun
+   script, `_follow_auto_submit()` soumet ce formulaire à la main. Sans cela la session reste
+   à mi-chemin **et l'échec d'authentification devient indétectable**.
+4. **Échecs en HTTP 200.** Un mauvais mot de passe donne un 200 vers
+   `servletlogin?pag=error_ingreso_login.jsp`, dont la page affiche « Acceso no disponible ».
+   Le verdict se lit dans l'URL et le texte (`_LOGIN_ERROR_MARKERS`), jamais dans le code HTTP.
+   Sans session, la page de planning part sur `error_acceso.jsp` (`_is_login_wall()`).
+5. **Le planning s'obtient en POST, pas en GET.** Demandée en GET, même authentifié,
+   `insc_horario_alumno_frameset.jsp` répond 200 `text/html` avec **6 octets** de blanc
+   (constaté le 13/08/2026). Le menu réel — `menu.jsp`, cadre de `sistemas.jsp` — ne navigue
+   pas : chaque entrée appelle
+
+   ```html
+   <a href="javascript:Enviar('sistinsc/insc_horario_alumno_frameset.jsp',0,0,0,0,'_parent')">
+   ```
+
+   et `Enviar(a,v,menu,opcion,m,target)` remplit les champs cachés du formulaire `form`
+   (`v`, `menu`, `opcion`, `m`, `listado`) puis le poste vers `a`. Ces paramètres font partie
+   de la demande. `_discover_planning_actions()` relit donc ces appels (`_ENVIAR_RE`) et
+   rejoue le POST ; les `<a href>` ordinaires ne servent que de repli en GET. La découverte
+   ne se déclenche que si aucun document ne porte de `<table>` (`_has_grid()`) : le chemin
+   nominal ne coûte aucune requête supplémentaire.
+
+6. **La grille est peuplée par un cadre voisin.** Le POST ouvre un frameset imbriqué dont
+   `insc_horario_per_detalle.jsp` porte la grille — mais il répond 4 octets tant qu'on le
+   demande en GET. C'est `insc_horario_per_opc_alumno.jsp`, le cadre au-dessus, qui le
+   remplit : `<body onLoad="document.form1.submit()">` poste `form1` vers lui avec la période
+   (`<select name="periodo">`, ici `2026-2`) et six champs cachés. `_fetch_with_frames()`
+   applique donc `_follow_auto_submit()` à **chaque** cadre, et conserve les deux documents —
+   le formulaire dit quels paramètres ont été retenus, la réponse porte les créneaux.
+
+Deux règles que ce repli a imposées, et qu'il ne faut pas défaire :
+
+- **Le point de départ est `landing_url`/`landing_html`**, la page où `login()` a abouti,
+  jamais `HOME_URL` — cette dernière est le formulaire de connexion, pas le menu.
+- **`_follow_auto_submit()` refuse tout formulaire portant un champ mot de passe.** Lu par
+  BeautifulSoup, `form_login` sort avec des champs vides ; le re-soumettre fabrique un
+  « Acceso no disponible » indiscernable d'un vrai échec, et peut invalider la session.
+- **Il vise le formulaire que le script nomme** (`_SUBMIT_CALL_RE`), pas le premier de la
+  page — `menu.jsp` en empile une demi-douzaine — et lit la valeur d'un `<select>` sur son
+  option sélectionnée, sans quoi `periodo` partirait vide et la grille reviendrait blanche.
+  Un `.submit()` enfermé dans une fonction n'est *pas* déclenché (`_strip_function_bodies()`) :
+  seul un `onload` ou un appel de premier niveau part au chargement.
+- **Toutes les étapes du parcours sont conservées**, pas seulement la dernière. La page de
+  détail repart d'elle-même vers le pied de page : ne garder que l'arrivée revenait à
+  récupérer la grille puis à la jeter — extraction vide, sans trace de la cause.
+
+`SigaClient.transcript` journalise URL, code HTTP, taille et type de chaque réponse de
+`fetch_planning()` ; `diagnostic["arrivee_apres_login"]` donne `landing_url`. `/siga/diagnostic`
+affiche les deux, et signale explicitement un corps vide. Sans cela, une page blanche et une
+page inattendue sont indiscernables — les deux donnent zéro créneau.
+
+### Extraction de la grille
+
+`parse_horario()` reçoit la liste `(url, html)` de `fetch_planning()` — le frameset **et** ses
+cadres, puisque l'URL du planning ne contient aucune donnée. Elle tente **deux lectures**,
+dans cet ordre.
+
+#### 1. Les appels `Consulta()` — la source de vérité
+
+C'est ainsi que `insc_horario_per_detalle.jsp` expose réellement le planning : chaque case
+de la grille décrit son contenu dans son propre `onMouseOver`.
+
+```html
+<td onMouseOver="Consulta('Casa Central Valparaíso','Diurna','Miércoles','1 (08:15-08:50)',
+    'ELI270 - FUNDAMENTOS DE ELECTROTECNIA   ','1','S. ZUMARAN','Cátedra',this,'C232','Inscrita');">
+```
+
+Jour, horaires, code, intitulé, paralelo, enseignant, type, salle et statut y sont explicites :
+plus rien à déduire d'une position en colonne ni d'un numéro de module. `_blocks_from_consulta()`
+repère le jour et le module **par leur forme** (`_match_day()`, `_MODULE_SLOT_RE`) et ne suppose
+l'ordre des arguments qu'après le module. Trois précautions :
+
+- les arguments sont découpés par `_split_js_args()`, pas par `split(",")` — les libellés du
+  portail contiennent des virgules (« ORTIZ, ALEJANDRO ») ;
+- le portail découpe la journée en modules d'environ 35 minutes et répète la même case sur
+  chacun : les modules **consécutifs** d'un même cours sont refusionnés (`_block_from_run()`) ;
+- le séparateur d'heure est inconstant — « 12:30-13.05 » se rencontre tel quel.
+
+Cátedra et Ayudantía d'une même matière portent le même code : le type est ajouté au titre,
+sans quoi deux créneaux distincts seraient indiscernables dans l'agenda.
+
+Les cases « TOPE DE HORARIO » utilisent `ConsultaTexto()` et sont ignorées.
+
+#### 2. L'analyse visuelle des tables — le recours
+
+Conservée pour le cas où cette page changerait de forme. Chaque `<table>` est développée
+en grille par `_table_to_grid()`, qui matérialise `rowspan`/`colspan` en dupliquant le contenu
+sur les cases couvertes : sans cela les cellules d'une ligne se décalent et les cours changent
+de jour. La table produisant le plus de créneaux l'emporte.
+
+Deux orientations sont gérées (jours en colonnes, ou en lignes puis transposées). Les lignes
+consécutives portant un texte identique sont refusionnées, ce qui couvre à la fois le `rowspan`
+et les vues qui répètent la cellule sur chaque module.
+
+`MODULE_TIMES` n'est qu'un **repli du repli**, employé quand l'en-tête annonce un numéro de
+module sans horaire. Ces blocs sortent avec `time_source = "module"`, sont marqués « horaire
+déduit » dans la prévisualisation et portent un avertissement dans leur description. **Ces
+horaires n'ont jamais pu être vérifiés**, et la page réelle les contredit : elle découpe la
+journée en modules d'environ 35 minutes (`1 (08:15-08:50)`, `2 (08:50-09:25)`…), là où cette
+table suppose des blocs de 70 minutes. Sur le portail d'aujourd'hui, la lecture `Consulta()`
+donne les horaires exacts et ce repli ne sert jamais — corriger la table si un jour il resurgit.
+
+Ce qu'un motif ne reconnaît pas n'est jamais perdu : le texte brut de la cellule est conservé
+dans `raw` et repris intégralement dans la description de l'événement.
+
+### Synchronisation plutôt qu'import
+
+`block_to_google_event()` produit un `iCalUID` déterministe
+(`siga-<sha1(code|paralelo|jour|horaires)>@siga.usm.cl`), poussé via `events().import_()` :
+rejouer la synchronisation **met à jour** les événements au lieu de les dupliquer.
+
+L'heure part en **heure locale accompagnée de `timeZone`**, et non en instant UTC suffixé `Z` —
+à l'inverse de la version statique. Une récurrence hebdomadaire doit suivre les changements
+d'heure chiliens, qu'un instant absolu figerait au décalage du premier jour.
+
+### Ce que le mot de passe ne touche pas
+
+Il est passé à `login()` puis abandonné : jamais en attribut du client, jamais dans
+`_PLANNING_STORE`, jamais dans la session Flask, jamais journalisé. `_PLANNING_STORE` suit la
+même règle que `_CREDENTIALS_STORE` — mémoire du processus, cookie porteur d'un simple `sid`.
+
+`/siga/diagnostic` sert le HTML brut récupéré, données personnelles comprises : acceptable
+tant que le serveur n'écoute que sur `127.0.0.1`, à revoir si cela changeait. Deux
+paramètres pour s'y retrouver — le portail empile une dizaine de documents : `?doc=<fragment>`
+filtre sur l'URL, `?save=1` écrit un fichier par document dans `SIGA_DUMP_DIR` (`.siga-dump/`
+par défaut, couvert par `.gitignore`, vidé à chaque appel). Ces fichiers portent les mêmes
+données personnelles que la page : les supprimer une fois le débogage terminé.
+
 ## Développement
 
 ```bash
@@ -134,9 +288,17 @@ python -m http.server 8080
 # Variante Flask
 pip install -r requirements.txt   # nécessite credentials.json à la racine
 python app.py                     # http://localhost:5000
+
+# Tests du parseur SIGA — sans réseau ni dépendance de test
+python test_siga.py
 ```
 
-Il n'y a ni tests, ni linter, ni CI configurés.
+Pas de linter ni de CI. Le seul test est [test_siga.py](test_siga.py), qui couvre les
+heuristiques d'extraction du planning sur des grilles reconstituées (`rowspan`, cellule
+répétée, grille transposée, horaires absents, table de mise en page) et la génération des
+événements Google. Il existe parce que la page réelle n'est pas consultable sans compte
+étudiant : ces heuristiques sont écrites sans jamais avoir vu leur cible, et une régression
+y passerait autrement inaperçue. Le lancer après toute retouche de `siga.py`.
 
 ## Conventions
 
@@ -158,3 +320,9 @@ Il n'y a ni tests, ni linter, ni CI configurés.
   README, `js/gcal.js` et la configuration Google Cloud. Un changement doit être répercuté partout.
 - **URL du dépôt** : les liens GitHub de `index.html` et `templates/index.html` pointent vers
   `BretzelCoder/GoogleAgendaAssistant`. À corriger en cas de fork ou de renommage.
+- **Fragilité assumée du parseur SIGA** : `siga.py` cible une page dont la structure exacte
+  n'a jamais pu être observée (elle exige un compte étudiant). L'extraction est donc
+  volontairement heuristique et ne lève pas d'exception sur une mise en page inattendue : elle
+  renvoie zéro créneau, et `/siga/diagnostic` sert la page brute pour ajuster. Toute
+  modification du portail se traduira par une prévisualisation vide, jamais par un import
+  silencieusement faux.

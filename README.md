@@ -196,7 +196,13 @@ l'URL est fait par le serveur Python, pas par le navigateur).
 | Stratégie de doublons configurable | ✅ | ❌ (toujours *import par UID*) |
 | Événements récurrents (`RRULE`) | ✅ | ❌ (récurrence non transmise) |
 | Barre de progression | ✅ | ❌ |
+| **Planning universitaire SIGA (USM)** | ❌ *(impossible)* | ✅ |
 | Hébergeable sur GitHub Pages | ✅ | ❌ |
+
+La synchronisation SIGA ne peut **pas** exister dans la version statique : un navigateur ne
+peut ni poster vers `siga.usm.cl` ni lire sa réponse depuis un autre domaine (le portail
+n'envoie aucun en-tête CORS), ni porter les cookies de session nécessaires. Il faut un
+serveur, donc la variante Flask.
 
 ### Installation
 
@@ -250,6 +256,45 @@ L'application écoute sur [http://localhost:5000](http://localhost:5000).
 > acceptable parce que le serveur n'écoute que sur `127.0.0.1`, **pas** pour une exposition
 > sur le réseau.
 
+### 🎓 Synchroniser le planning universitaire (SIGA — USM)
+
+La variante Flask sait aussi se connecter au portail **SIGA** de l'Universidad Técnica
+Federico Santa María, lire la page *Horario del alumno* et pousser tous les cours du
+semestre dans Google Agenda, en une fois.
+
+**Marche à suivre :**
+
+1. Connectez-vous d'abord à Google Calendar (bouton habituel)
+2. Dans la carte **🎓 Planning universitaire**, saisissez :
+   - votre identifiant USM (`nombre.apellido`) et le domaine correspondant
+     (`@usm.cl`, `@alumnos.usm.cl`, `@sansano.usm.cl`…)
+   - votre mot de passe de courriel USM
+   - éventuellement une autre page de planning que celle proposée par défaut
+3. **🔍 Lire mon planning SIGA** — comptez quelques secondes : le portail passe par une
+   salle d'attente (Queue-it)
+4. Vérifiez la grille extraite : jour, horaire, cours, salle, enseignant. Décochez ce que
+   vous ne voulez pas
+5. Choisissez la **période** (début et fin du semestre), le **fuseau** et l'**agenda de
+   destination**, puis **⬆️ Synchroniser**
+
+Chaque cours devient un **événement hebdomadaire récurrent** borné à la période choisie,
+avec salle, enseignant, paralelo et modules dans la description.
+
+**Rejouable sans doublon.** L'identifiant de chaque événement est calculé à partir du cours
+(code, paralelo, jour, horaire) : relancer la synchronisation **met à jour** les événements
+existants au lieu d'en créer de nouveaux. Un cours qui change de salle est corrigé sur place.
+
+> ⚠️ Un cours dont l'horaire n'est pas affiché par SIGA (seul le numéro de module l'est) est
+> daté d'après la grille standard des modules et signalé « horaire déduit » dans la
+> prévisualisation. Vérifiez-le avant d'importer.
+
+**Si aucun créneau n'est extrait :** la page réellement récupérée est consultable sur
+[http://localhost:5000/siga/diagnostic](http://localhost:5000/siga/diagnostic). Elle permet
+d'ajuster les heuristiques de `siga.py` à la mise en page rencontrée.
+
+> 🔐 Vos identifiants USM ne servent qu'à ouvrir la session SIGA le temps de la requête :
+> ils ne sont ni enregistrés sur disque, ni placés dans le cookie de session, ni journalisés.
+
 ---
 
 ## 🔒 Vie privée & sécurité
@@ -267,6 +312,8 @@ L'application écoute sur [http://localhost:5000](http://localhost:5000).
 - **Aucun jeton dans le cookie** : les sessions Flask sont signées mais non chiffrées, donc lisibles par le navigateur. Le cookie ne contient qu'un identifiant opaque ; token et refresh token restent en mémoire du serveur et disparaissent à l'arrêt
 - **Écoute locale seulement** (`127.0.0.1`), débogueur désactivé par défaut
 - **URLs distantes filtrées** : le téléchargement d'un ICS par URL refuse les adresses privées, locales et réservées, y compris après redirection (protection SSRF)
+- **Identifiants universitaires jamais conservés** : le mot de passe USM sert à l'appel de connexion puis est abandonné avec la session SIGA. Il n'est ni écrit sur disque, ni mis en session, ni journalisé — seuls les créneaux extraits restent en mémoire du serveur, jusqu'à l'import ou la déconnexion
+- **Navigation SIGA cloisonnée** : les redirections sont suivies une par une et l'hôte revalidé à chaque saut ; seuls `*.usm.cl` et `*.queue-it.net` sont acceptés, pour qu'une redirection inattendue n'emporte pas les cookies de session
 - `credentials.json` contient un **client secret** : gardez-le hors du dépôt
 - Prévue pour un usage **local uniquement** (OAuth en HTTP autorisé)
 
@@ -289,6 +336,8 @@ GoogleAgendaAssistant/
 │
 │  ── Variante Flask (locale, optionnelle) ──
 ├── app.py              # Serveur Flask (OAuth côté serveur + import)
+├── siga.py             # Connecteur SIGA (USM) — session, extraction du planning
+├── test_siga.py        # Tests du parseur SIGA (python test_siga.py)
 ├── templates/
 │   └── index.html      # Gabarit Jinja2 (CSS et JS inline)
 ├── requirements.txt    # Dépendances Python de la variante Flask

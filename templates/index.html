@@ -140,7 +140,8 @@
       content: ""; flex: 1; height: 1px; background: var(--border);
     }
 
-    input[type="url"], select {
+    input[type="url"], input[type="text"], input[type="password"],
+    input[type="date"], select {
       width: 100%;
       padding: 10px 14px;
       border: 1px solid var(--border);
@@ -152,9 +153,81 @@
       color: var(--text);
       margin-bottom: 16px;
     }
-    input[type="url"]:focus, select:focus { border-color: var(--primary); }
+    input:focus, select:focus { border-color: var(--primary); }
 
     .form-group { margin-bottom: 16px; }
+
+    /* ── Carte SIGA ── */
+    .card.wide { max-width: 860px; }
+    .card h2 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card .subtitle { color: var(--muted); font-size: .85rem; margin-bottom: 20px; line-height: 1.5; }
+    .row2 { display: flex; gap: 12px; }
+    .row2 > * { flex: 1; min-width: 0; }
+    .inline-split { display: flex; gap: 8px; }
+    .inline-split input { flex: 2; }
+    .inline-split select { flex: 1; }
+    .notice {
+      background: #fef7e0;
+      border-left: 4px solid var(--warning);
+      color: #8a6c00;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: .82rem;
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+
+    /* ── Prévisualisation du planning ── */
+    .table-wrap { overflow-x: auto; margin-bottom: 20px; }
+    table.preview { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    table.preview th, table.preview td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    table.preview th { background: #f1f3f4; font-weight: 600; color: var(--muted); font-size: .78rem; }
+    table.preview tr:hover td { background: #f8f9fa; }
+    table.preview .day { white-space: nowrap; font-weight: 500; }
+    table.preview .hours { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    table.preview .meta { color: var(--muted); font-size: .78rem; }
+    .badge {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 999px;
+      font-size: .7rem;
+      font-weight: 600;
+      background: #fef7e0;
+      color: #8a6c00;
+      white-space: nowrap;
+    }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+      font-size: .82rem;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+    .toolbar a, .linkish {
+      color: var(--primary);
+      text-decoration: none;
+      cursor: pointer;
+      background: none;
+      border: none;
+      font-size: .82rem;
+      padding: 0;
+    }
+    .toolbar a:hover, .linkish:hover { text-decoration: underline; }
 
     /* ── Not authenticated ── */
     .not-auth {
@@ -261,6 +334,167 @@
 
 </div>
 
+{% if authenticated %}
+<!-- ── Planning universitaire (SIGA) ────────────────────────────────────── -->
+<div class="card">
+  <h2>🎓 Planning universitaire</h2>
+  <p class="subtitle">
+    Connexion au portail <strong>SIGA</strong> de l'USM avec vos identifiants
+    universitaires, lecture de la page « Horario del alumno », puis
+    synchronisation de tous les cours dans votre agenda Google.
+  </p>
+
+  <div class="notice">
+    🔒 Vos identifiants USM ne servent qu'à ouvrir la session SIGA le temps de
+    cette requête : ils ne sont ni enregistrés, ni placés dans le cookie de
+    session. Le portail passant par une salle d'attente, la lecture peut
+    demander quelques secondes.
+  </div>
+
+  <form action="/siga/planning" method="POST" id="sigaForm">
+    <div class="form-group">
+      <label for="siga_login">Identifiant USM</label>
+      <div class="inline-split">
+        <input type="text" name="siga_login" id="siga_login"
+               placeholder="nombre.apellido" autocomplete="username" required/>
+        <select name="siga_server" id="siga_server" title="Domaine du compte">
+          {% for s in siga_servers %}
+            <option value="{{ s }}">@{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="siga_password">Mot de passe (courriel USM)</label>
+      <input type="password" name="siga_password" id="siga_password"
+             autocomplete="current-password" required/>
+    </div>
+
+    <div class="form-group">
+      <label for="siga_url">Page du planning</label>
+      <input type="url" name="siga_url" id="siga_url" value="{{ siga_planning_url }}"/>
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-full" id="sigaBtn">
+      🔍 Lire mon planning SIGA
+    </button>
+  </form>
+</div>
+
+{% if planning %}
+<!-- ── Prévisualisation du planning extrait ─────────────────────────────── -->
+<div class="card wide">
+  <h2>🗓️ Planning extrait</h2>
+  <p class="subtitle">
+    {{ planning.blocks|length }} créneau(x) lu(s) le {{ planning.fetched_at }}.
+    Vérifiez-les avant de les pousser dans votre agenda.
+  </p>
+
+  {% if planning.blocks %}
+  <form action="/siga/import" method="POST" id="sigaImportForm">
+
+    <div class="toolbar">
+      <span>
+        <button type="button" class="linkish" onclick="toggleAll(true)">Tout cocher</button>
+        &middot;
+        <button type="button" class="linkish" onclick="toggleAll(false)">Tout décocher</button>
+      </span>
+      <span>
+        <a href="/siga/diagnostic" target="_blank" rel="noopener">Voir la page source</a>
+        &middot;
+        <a href="/siga/oublier">Oublier ce planning</a>
+      </span>
+    </div>
+
+    <div class="table-wrap">
+      <table class="preview">
+        <thead>
+          <tr>
+            <th><span class="meta" title="Sélection">✓</span></th>
+            <th>Jour</th>
+            <th>Horaire</th>
+            <th>Cours</th>
+            <th>Salle</th>
+            <th>Détails</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in planning.blocks %}
+          <tr>
+            <td><input type="checkbox" name="blocs" value="{{ b.key }}" checked
+                       title="Inclure ce créneau"/></td>
+            <td class="day">{{ b.weekday_label|capitalize }}</td>
+            <td class="hours">
+              {{ b.start }}–{{ b.end }}
+              {% if b.needs_review %}<br><span class="badge">horaire déduit</span>{% endif %}
+            </td>
+            <td>
+              {{ b.summary }}
+              {% if b.code %}<br><span class="meta">{{ b.code }}</span>{% endif %}
+            </td>
+            <td class="meta">{{ b.location or "—" }}</td>
+            <td class="meta">
+              {% if b.teacher %}{{ b.teacher }}<br>{% endif %}
+              {% if b.paralelo %}Paralelo {{ b.paralelo }}<br>{% endif %}
+              {% if b.modules %}Modules {{ b.modules|join("-") }}{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="row2">
+      <div class="form-group">
+        <label for="date_debut">Début de la période</label>
+        <input type="date" name="date_debut" id="date_debut" value="{{ default_start }}"/>
+      </div>
+      <div class="form-group">
+        <label for="date_fin">Fin de la période</label>
+        <input type="date" name="date_fin" id="date_fin" value="{{ default_end }}"/>
+      </div>
+    </div>
+
+    <div class="row2">
+      <div class="form-group">
+        <label for="timezone">Fuseau horaire</label>
+        <input type="text" name="timezone" id="timezone" value="{{ siga_timezone }}"/>
+      </div>
+      <div class="form-group">
+        <label for="term">Libellé de la période (facultatif)</label>
+        <input type="text" name="term" id="term" placeholder="2026-2"/>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="siga_calendar_id">Agenda de destination</label>
+      <select name="calendar_id" id="siga_calendar_id">
+        {% for cal in calendars %}
+          <option value="{{ cal.id }}" {% if cal.get('primary') %}selected{% endif %}>
+            {{ cal.get('summaryOverride') or cal.get('summary', cal.id) }}
+            {% if cal.get('primary') %}(principal){% endif %}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-full" id="sigaImportBtn">
+      ⬆️ Synchroniser tous les cours cochés
+    </button>
+  </form>
+  {% else %}
+  <p class="subtitle">
+    Aucun créneau n'a pu être extrait. La page récupérée est consultable sur
+    <a href="/siga/diagnostic" target="_blank" rel="noopener">/siga/diagnostic</a> —
+    elle permet d'ajuster l'extraction dans <code>siga.py</code>.
+  </p>
+  <a href="/siga/oublier" class="btn btn-google">Oublier ce planning</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endif %}
+
 <footer>
   Open source &middot;
   <a href="https://github.com/BretzelCoder/GoogleAgendaAssistant" target="_blank" rel="noopener noreferrer">GitHub</a>
@@ -305,13 +539,25 @@
   }
 
   // ── Submit feedback ──────────────────────────────────────────────────────
-  const form      = document.getElementById("importForm");
-  const submitBtn = document.getElementById("submitBtn");
-  if (form) {
-    form.addEventListener("submit", () => {
-      submitBtn.disabled = true;
-      submitBtn.textContent = "⏳ Import en cours…";
+  function busyOnSubmit(formId, btnId, label) {
+    const f = document.getElementById(formId);
+    const b = document.getElementById(btnId);
+    if (!f || !b) return;
+    f.addEventListener("submit", () => {
+      b.disabled = true;
+      b.textContent = label;
     });
+  }
+
+  busyOnSubmit("importForm",     "submitBtn",     "⏳ Import en cours…");
+  // La lecture SIGA traverse la salle d'attente Queue-it : le délai peut
+  // dépasser la dizaine de secondes, d'où le libellé explicite.
+  busyOnSubmit("sigaForm",       "sigaBtn",       "⏳ Connexion à SIGA…");
+  busyOnSubmit("sigaImportForm", "sigaImportBtn", "⏳ Synchronisation en cours…");
+
+  // ── Sélection des créneaux ───────────────────────────────────────────────
+  function toggleAll(checked) {
+    document.querySelectorAll("input[name='blocs']").forEach(c => c.checked = checked);
   }
 </script>
 
