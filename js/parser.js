@@ -400,13 +400,30 @@ const ICSParser = (() => {
 
   // ── Point d'entrée public ──────────────────────────────────────────────────
 
+  // Certains exports (LinkedIn notamment) livrent le .ics encodé en base64 :
+  // ical.js y voit une ligne sans « : » et lève « invalid line ».
+  function decodeIfBase64(text) {
+    const trimmed = text.replace(/^\uFEFF/, '').trim();
+    if (/^BEGIN:/i.test(trimmed)) return trimmed;
+    const compact = trimmed.replace(/\s+/g, '');
+    if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(compact)) return text;
+    try {
+      const binary = atob(compact.replace(/-/g, '+').replace(/_/g, '/'));
+      const bytes  = Uint8Array.from(binary, c => c.charCodeAt(0));
+      const decoded = new TextDecoder('utf-8').decode(bytes).replace(/^\uFEFF/, '');
+      return /^\s*BEGIN:VCALENDAR/i.test(decoded) ? decoded : text;
+    } catch (_) {
+      return text;
+    }
+  }
+
   /**
    * Parse le contenu texte d'un fichier ICS.
    * @param {string} icsText - Contenu brut du fichier ICS
    * @returns {ParsedEvent[]}
    */
   function parseICS(icsText) {
-    const jcalData = ICAL.parse(icsText);
+    const jcalData = ICAL.parse(decodeIfBase64(icsText));
     const comp     = new ICAL.Component(jcalData);
     // Avant toute lecture de date : les valeurs sont résolues au premier accès.
     registerTimezones(comp);
