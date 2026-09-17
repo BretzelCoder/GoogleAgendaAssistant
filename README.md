@@ -13,6 +13,7 @@ Application web 100 % statique pour importer des fichiers `.ics` (ou flux iCalen
 - 👀 Prévisualisation des événements avant import (avec sélection individuelle)
 - 🗂 Choix de l'agenda de destination
 - 🔎 Gestion des doublons : ignorer · mettre à jour · dupliquer
+- 🧬 Lecture des `.ics` encodés en base64 (exports LinkedIn notamment), décodés automatiquement
 - 🔐 OAuth2 côté client — aucun mot de passe stocké, aucun serveur
 
 ---
@@ -124,6 +125,8 @@ Deux options :
 
 Cliquez ensuite sur **🔍 Analyser**.
 
+> 💡 Certains services, comme **LinkedIn**, exportent leurs événements dans un `.ics` encodé en base64 (le fichier commence par `QkVHSU46VkNBTEVOREFS…` au lieu de `BEGIN:VCALENDAR`). Rien à faire : l'application le détecte et le décode avant l'analyse, que la source soit un fichier ou une URL.
+
 > ⚠️ Certaines URLs de flux iCalendar refusent les requêtes depuis un navigateur (CORS). Si l'analyse échoue avec une URL, téléchargez le fichier `.ics` manuellement et utilisez l'upload.
 
 ### 3. Prévisualiser et sélectionner
@@ -156,6 +159,7 @@ Cliquez sur **⬆️ Importer**. Une barre de progression s'affiche. À la fin, 
 | *La popup a été bloquée* | Chrome bloque la popup OAuth | Autorisez les popups pour ce domaine dans la barre d'adresse |
 | *Origine non autorisée* | L'URL d'où vous accédez n'est pas déclarée | Ajoutez l'URL dans **Origines JavaScript autorisées** de votre Client ID |
 | *Fichier ICS invalide* | Le fichier est corrompu ou mal encodé | Vérifiez que le fichier s'ouvre correctement dans un éditeur de texte |
+| *invalid line (no token ";" or ":")* | Fichier `.ics` encodé en base64 (export LinkedIn), sur une version antérieure de l'application | Rechargez la page sans cache (Ctrl+F5) : le décodage est désormais automatique |
 | *CORS ou réseau* | L'URL du flux refuse les requêtes navigateur | Téléchargez le `.ics` manuellement et utilisez l'upload, ou passez par la [variante Flask](#-variante-flask-serveur-local) |
 | *Client ID invalide* | Le format saisi ne se termine pas par `.apps.googleusercontent.com` | Recopiez le Client ID complet depuis Google Cloud Console |
 | *Impossible de charger Google* | Le script Google Identity Services n'a pas pu être chargé (bloqueur de pub, hors-ligne) | Désactivez le bloqueur sur ce domaine et rechargez |

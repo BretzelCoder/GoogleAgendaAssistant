@@ -49,6 +49,10 @@ index.html
   pour rester visible dans la prévisualisation
 - des accesseurs d'affichage (`startDisplay`, `summary`, `isRecurring`, …) formatés en `fr-FR`
 
+Avant `ICAL.parse()`, `decodeIfBase64()` décode un fichier livré en base64 (export LinkedIn) :
+sans cela ical.js lève « invalid line (no token ";" or ":") ». Le décodage n'est retenu que
+s'il produit un `BEGIN:VCALENDAR` ; sinon le texte d'origine est parsé tel quel.
+
 La `RRULE` est transmise telle quelle ; les `EXDATE` sont réécrites en forme iCalendar
 (`20260810T120000Z`, ou `EXDATE;VALUE=DATE:` pour les dates seules) — l'ISO-8601 étendu
 est refusé par Google.
