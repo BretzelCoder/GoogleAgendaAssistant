@@ -2,6 +2,20 @@
 
 Application web 100 % statique pour importer des fichiers `.ics` (ou flux iCalendar) directement dans **Google Agenda** — sans backend, sans serveur, hébergeable gratuitement sur **GitHub Pages**.
 
+## 👉 [Ouvrir l'application](https://bretzelcoder.github.io/GoogleAgendaAssistant/)
+
+**Aucune installation** : l'application tourne directement dans votre navigateur, depuis GitHub Pages.
+
+| Étape | À faire | Durée |
+|---|---|---|
+| 1 | Créer votre **Client ID Google** — étapes 1 à 4 de la [mise en place](#-mise-en-place), en déclarant l'origine `https://bretzelcoder.github.io` | ~10 min, une seule fois |
+| 2 | Ouvrir **[bretzelcoder.github.io/GoogleAgendaAssistant](https://bretzelcoder.github.io/GoogleAgendaAssistant/)** et coller le Client ID | quelques secondes |
+| 3 | Se connecter avec Google, déposer le `.ics`, prévisualiser, importer | — |
+
+> Pas de clonage, pas de Python, pas de serveur local. Le Client ID reste mémorisé dans votre navigateur :
+> les fois suivantes, il suffit d'ouvrir la page. Cloner le dépôt n'est utile que pour modifier le code
+> ou héberger votre propre copie.
+
 > **Deux implémentations coexistent dans ce dépôt.** La version statique (`index.html` + `js/`) est celle décrite ci-dessous et celle déployée sur GitHub Pages. Une seconde version, **Flask**, est également présente (`app.py` + `templates/`) : elle offre moins de fonctionnalités et s'exécute en local uniquement. Voir [Variante Flask](#-variante-flask-serveur-local).
 
 ---
@@ -22,6 +36,9 @@ Application web 100 % statique pour importer des fichiers `.ics` (ou flux iCalen
 
 La configuration se fait **une seule fois** et prend environ 10 minutes.
 
+> 🌍 **Usage direct via GitHub Pages** : seules les **étapes 1 à 4** et l'**étape 6** vous concernent.
+> Ignorez l'étape 0 (récupérer le projet) et l'étape 5 (serveur local).
+
 ### Prérequis
 
 | | Version statique | Variante Flask |
@@ -31,7 +48,7 @@ La configuration se fait **une seule fois** et prend environ 10 minutes.
 | Python | 3.x — uniquement pour servir les fichiers ; n'importe quel serveur HTTP fait l'affaire | **3.8 ou plus** (imposé par Flask 3.0) |
 | Dépendances à installer | ❌ aucune — les bibliothèques sont déjà dans `js/` | `pip install -r requirements.txt` |
 
-### Étape 0 — Récupérer le projet
+### Étape 0 — Récupérer le projet *(usage local uniquement)*
 
 ```bash
 git clone https://github.com/BretzelCoder/GoogleAgendaAssistant.git
@@ -75,15 +92,20 @@ allez directement à [Déploiement sur GitHub Pages](#-déploiement-sur-github-p
 2. Type d'application : **Application Web**
 3. Dans **Origines JavaScript autorisées**, ajoutez :
    ```
+   https://bretzelcoder.github.io
    http://localhost:8080
-   https://votre-compte.github.io
    ```
+   - `https://bretzelcoder.github.io` — pour utiliser l'[application en ligne](https://bretzelcoder.github.io/GoogleAgendaAssistant/) (sans chemin ni `/` final)
+   - `http://localhost:8080` — seulement si vous la lancez en local
+   - `https://votre-compte.github.io` — si vous hébergez votre propre copie
 4. Cliquez **Create**
 5. Copiez le **Client ID** généré (format `XXXXXXXX.apps.googleusercontent.com`)
 
 > Le Client ID est une valeur publique — il identifie votre application, pas vous.
 
-### Étape 5 — Lancer l'application en local
+### Étape 5 — Lancer l'application en local *(usage local uniquement)*
+
+> Vous utilisez la [version en ligne](https://bretzelcoder.github.io/GoogleAgendaAssistant/) ? Passez directement à l'étape 6.
 
 Google refuse l'OAuth depuis un fichier ouvert en `file://`. Il faut servir le dossier en HTTP,
 **sur le port 8080** (c'est l'origine déclarée à l'étape 4) :
@@ -100,7 +122,7 @@ Puis ouvrez [http://localhost:8080](http://localhost:8080).
 
 ### Étape 6 — Configurer le Client ID dans l'application
 
-Collez votre **Client ID** dans le champ en haut de la page et cliquez **Enregistrer**.
+Ouvrez l'[application en ligne](https://bretzelcoder.github.io/GoogleAgendaAssistant/) (ou `http://localhost:8080` en local), collez votre **Client ID** dans le champ en haut de la page et cliquez **Enregistrer**.
 La page se recharge automatiquement.
 
 > Le Client ID est stocké dans le `localStorage` du navigateur (clé `ics_gcal_client_id`).
@@ -169,6 +191,10 @@ Cliquez sur **⬆️ Importer**. Une barre de progression s'affiche. À la fin, 
 ---
 
 ## 🌐 Déploiement sur GitHub Pages
+
+> Inutile pour simplement utiliser l'outil : il est déjà en ligne sur
+> [bretzelcoder.github.io/GoogleAgendaAssistant](https://bretzelcoder.github.io/GoogleAgendaAssistant/).
+> Cette section sert à héberger **votre propre copie**.
 
 1. Forkez ou clonez ce dépôt sur votre compte GitHub
 2. Dans les paramètres du dépôt : **Settings → Pages → Source : Deploy from a branch → main / (root)**
