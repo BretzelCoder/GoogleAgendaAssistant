@@ -321,7 +321,7 @@ d'ajuster les heuristiques de `siga.py` à la mise en page rencontrée.
 ### Version statique
 
 - **Aucun serveur** : toute la logique s'exécute dans votre navigateur
-- **Aucune donnée transmise** : ni le fichier ICS, ni le token Google ne quittent votre navigateur — les seules requêtes sortantes vont vers les API Google
+- **Aucune donnée personnelle transmise** : ni le fichier ICS, ni le token Google ne quittent votre navigateur — les seules requêtes sortantes vont vers les API Google, plus un comptage de visites anonyme et sans cookie via [GoatCounter](https://www.goatcounter.com/), qui ne reçoit ni le fichier ICS ni le jeton (uniquement sur la version GitHub Pages ; une copie locale ne charge rien)
 - **Token en mémoire** : le token d'accès n'est jamais persisté ; il disparaît au rechargement de la page. Seul le Client ID est conservé (`localStorage`)
 - **Token temporaire** : le token OAuth expire après 1 heure (standard Google)
 - **Client ID public** : c'est normal — seuls les domaines que vous autorisez explicitement peuvent l'utiliser

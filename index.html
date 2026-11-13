@@ -5,6 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ICS → Google Calendar</title>
   <link rel="stylesheet" href="css/style.css"/>
+<!-- Mesure d'audience GoatCounter : sans cookie, données agrégées, active uniquement sur GitHub Pages -->
+<script>
+(function () {
+  var host = 'bretzelcoder.github.io', queue = [];
+  window.gcEvent = function (p, title) {
+    var gc = window.goatcounter;
+    if (gc && typeof gc.count === 'function') { try { gc.count({ path: p, title: title || p, event: true }); } catch (e) {} }
+    else if (location.hostname === host && queue.length < 20) queue.push([p, title]);
+  };
+  if (location.hostname !== host) return;
+  window.goatcounter = { path: function () { return location.pathname; } };
+  var s = document.createElement('script');
+  s.async = true; s.src = 'https://gc.zgo.at/count.js';
+  s.setAttribute('data-goatcounter', 'https://bretzelgoatcounter.goatcounter.com/count');
+  s.onload = function () { while (queue.length) { var e = queue.shift(); window.gcEvent(e[0], e[1]); } };
+  document.head.appendChild(s);
+})();
+</script>
 </head>
 <body>
 
@@ -18,8 +36,9 @@
 <div class="card" id="setup-panel">
   <label class="label">🔑 Votre Google OAuth Client ID</label>
   <p class="setup-hint">
-    Cette application s'exécute entièrement dans votre navigateur — aucune donnée n'est
-    envoyée à un serveur tiers. Elle nécessite un <strong>Client ID Google</strong> pour
+    Cette application s'exécute entièrement dans votre navigateur — vos fichiers ICS et
+    votre jeton Google ne sont envoyés qu'aux API Google ; seule une mesure d'audience
+    anonyme, sans cookie, est réalisée via GoatCounter. Elle nécessite un <strong>Client ID Google</strong> pour
     accéder à votre agenda.
     <a href="https://github.com/BretzelCoder/GoogleAgendaAssistant#-mise-en-place" target="_blank" rel="noopener noreferrer">
       Comment l'obtenir ?
@@ -171,7 +190,7 @@
 
 <!-- ── Footer ────────────────────────────────────────────────────────────── -->
 <footer>
-  100% côté client · Aucune donnée envoyée à un serveur ·
+  100% côté client · Vos fichiers et votre agenda ne quittent pas votre navigateur · Mesure d'audience anonyme (GoatCounter, sans cookie) ·
   <a href="https://github.com/BretzelCoder/GoogleAgendaAssistant" target="_blank" rel="noopener noreferrer">GitHub</a>
 </footer>
 
